@@ -167,7 +167,15 @@ async def start_eda(
     project = db.query(Project).filter(Project.id == project_id, Project.user_id == current_user.id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id, ProjectDataset.project_id == project_id).first()
+    dataset = (
+        db.query(Dataset)
+        .join(ProjectDataset, Dataset.id == ProjectDataset.dataset_id)
+        .filter(
+            Dataset.id == dataset_id,
+            ProjectDataset.project_id == project_id,
+        )
+        .first()
+    )
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
 

@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.db.session import get_db
-from app.db.models import Project as ProjectModel, Dataset, ProjectDataset, ModelMeta, Run, Artifact, PredictionResult, Log
+from sqlalchemy import func
+from app.db.models import Project as ProjectModel, Dataset, ProjectDataset, ModelMeta, Run, Artifact, PredictionResult, Log, EDAReport
 from app.schemas.projects import ProjectCreate, Project as ProjectSchema
 from app.schemas.datasets import Dataset as DatasetSchema
 from app.dependencies.auth import get_current_user
@@ -24,7 +25,7 @@ def create_project(project_create: ProjectCreate, db: Session = Depends(get_db),
     db.add(project)
     db.commit()
     db.refresh(project)
-    return ProjectSchema.from_orm(project)
+    return ProjectSchema.model_validate(project)
 
 @router.get("/", response_model=List[ProjectSchema])
 def list_projects(
@@ -39,92 +40,153 @@ def list_projects(
         limit = 20
     offset = (page - 1) * limit
     projects = db.query(ProjectModel).filter(ProjectModel.user_id == current_user.id).offset(offset).limit(limit).all()
-    return [ProjectSchema.from_orm(p) for p in projects]
+    return [ProjectSchema.model_validate(p) for p in projects]
 
 @router.get("/overview-stats")
 def get_portfolio_stats(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    from sqlalchemy import func
-    from app.db.models import EDAReport
+    user_id = current_user.id
 
-    active_projects = db.query(ProjectModel).filter(ProjectModel.user_id == current_user.id).count()
-    datasets_used = db.query(Dataset).filter(Dataset.user_id == current_user.id).count()
-    models_count = db.query(ModelMeta).join(Run).join(ProjectModel).filter(ProjectModel.user_id == current_user.id).count()
+    active_projects = (
+        db.query(func.count(ProjectModel.id))
+        .filter(ProjectModel.user_id == user_id)
+        .scalar()
+    )
+    datasets_used = (
+        db.query(func.count(Dataset.id))
+        .filter(Dataset.user_id == user_id)
+        .scalar()
+    )
+    models_count = (
+        db.query(func.count(ModelMeta.id))
+        .join(Run, ModelMeta.run_id == Run.id)
+        .join(ProjectModel, Run.project_id == ProjectModel.id)
+        .filter(ProjectModel.user_id == user_id)
+        .scalar()
+    )
 
-    # Avg Data Quality from EDA reports
-    eda_reports = (
-        db.query(EDAReport)
+    # Avg Data Quality from EDA reports (SQL aggregation, no in-memory load)
+    avg_data_quality_row = (
+        db.query(func.avg(EDAReport.data_quality_score))
         .join(ProjectModel, EDAReport.project_id == ProjectModel.id)
-        .filter(ProjectModel.user_id == current_user.id)
-        .all()
+        .filter(ProjectModel.user_id == user_id)
+        .scalar()
     )
     avg_data_quality = (
-        f"{round(sum(r.data_quality_score for r in eda_reports) / len(eda_reports), 1)}%"
-        if eda_reports else "N/A"
+        f"{round(float(avg_data_quality_row), 1)}%" if avg_data_quality_row is not None else "N/A"
     )
 
     # Top model by accuracy metric
     top_model_type = "N/A"
-    all_models = (
-        db.query(ModelMeta).join(Run).join(ProjectModel)
-        .filter(ProjectModel.user_id == current_user.id)
+    top_model = (
+        db.query(ModelMeta)
+        .join(Run, ModelMeta.run_id == Run.id)
+        .join(ProjectModel, Run.project_id == ProjectModel.id)
+        .filter(ProjectModel.user_id == user_id)
         .all()
     )
-    if all_models:
+    if top_model:
         best = max(
-            all_models,
+            top_model,
             key=lambda m: (
-                m.metrics_json.get("accuracy", 0)
-                if isinstance(m.metrics_json, dict) else 0
-            )
+                float(m.metrics_json.get("accuracy", 0))
+                if isinstance(m.metrics_json, dict) else 0.0
+            ),
         )
         top_model_type = best.name
 
     return {
-        "activeProjects": active_projects,
-        "datasetsUsed": datasets_used,
-        "modelsTraining": models_count,
+        "activeProjects": active_projects or 0,
+        "datasetsUsed": datasets_used or 0,
+        "modelsTraining": models_count or 0,
         "avgDataQuality": avg_data_quality,
         "topModelType": top_model_type
     }
 
 @router.get("/recent-projects")
 def get_recent_projects(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    projects = (
-        db.query(ProjectModel)
-        .filter(ProjectModel.user_id == current_user.id)
-        .order_by(ProjectModel.created_at.desc())
+    user_id = current_user.id
+
+    # Subquery for latest run per project
+    latest_run_subq = (
+        db.query(
+            Run.project_id,
+            func.max(Run.started_at).label("latest_started_at"),
+        )
+        .group_by(Run.project_id)
+        .subquery()
+    )
+
+    # Projects with latest run info in a single query
+    projects_with_runs = (
+        db.query(
+            ProjectModel,
+            latest_run_subq.c.latest_started_at,
+        )
+        .outerjoin(
+            latest_run_subq,
+            ProjectModel.id == latest_run_subq.c.project_id,
+        )
+        .filter(ProjectModel.user_id == user_id)
+        .order_by(
+            func.coalesce(latest_run_subq.c.latest_started_at, ProjectModel.created_at).desc()
+        )
         .limit(5)
         .all()
     )
 
+    # Collect project IDs to batch-load datasets
+    project_ids = [p.id for p, _ in projects_with_runs]
+
+    # First dataset per project (single aggregated query)
+    first_dataset_map = {}
+    if project_ids:
+        first_ds_subq = (
+            db.query(
+                ProjectDataset.project_id,
+                func.min(ProjectDataset.dataset_id).label("first_dataset_id"),
+            )
+            .filter(ProjectDataset.project_id.in_(project_ids))
+            .group_by(ProjectDataset.project_id)
+            .subquery()
+        )
+        first_datasets = (
+            db.query(first_ds_subq.c.project_id, Dataset.filename)
+            .join(Dataset, Dataset.id == first_ds_subq.c.first_dataset_id)
+            .all()
+        )
+        first_dataset_map = {pid: fname for pid, fname in first_datasets}
+
+    # Latest run status per project (single query)
+    latest_run_status_map = {}
+    if project_ids:
+        # Re-join to get status for each project's latest run
+        run_status_subq = (
+            db.query(
+                Run.project_id,
+                Run.status,
+                Run.started_at,
+            )
+            .join(
+                latest_run_subq,
+                (Run.project_id == latest_run_subq.c.project_id)
+                & (Run.started_at == latest_run_subq.c.latest_started_at),
+            )
+            .all()
+        )
+        latest_run_status_map = {r.project_id: r.status for r in run_status_subq}
+
     result = []
-    for project in projects:
-        first_dataset = (
-            db.query(Dataset)
-            .join(ProjectDataset, Dataset.id == ProjectDataset.dataset_id)
-            .filter(ProjectDataset.project_id == project.id)
-            .first()
-        )
-        latest_run = (
-            db.query(Run)
-            .filter(Run.project_id == project.id)
-            .order_by(Run.started_at.desc())
-            .first()
-        )
-        status = latest_run.status if latest_run else "EMPTY"
-        # Use latest run's started_at if available, else project created_at
-        updated_dt = (
-            latest_run.started_at if latest_run and latest_run.started_at
-            else project.created_at
-        )
+    for project, latest_started_at in projects_with_runs:
+        status = latest_run_status_map.get(project.id) or "EMPTY"
+        updated_dt = latest_started_at or project.created_at
         updated = updated_dt.strftime("%Y-%m-%d") if updated_dt else "N/A"
 
         result.append({
             "id": project.id,
             "name": project.name,
-            "dataset": first_dataset.filename if first_dataset else "No dataset",
+            "dataset": first_dataset_map.get(project.id, "No dataset"),
             "status": status,
-            "updated": updated
+            "updated": updated,
         })
 
     return result
@@ -134,7 +196,7 @@ def get_project(project_id: str, db: Session = Depends(get_db), current_user = D
     project = db.query(ProjectModel).filter(ProjectModel.id == project_id, ProjectModel.user_id == current_user.id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return ProjectSchema.from_orm(project)
+    return ProjectSchema.model_validate(project)
 
 @router.put("/{project_id}", response_model=ProjectSchema)
 def update_project(project_id: str, project_update: ProjectCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -145,7 +207,7 @@ def update_project(project_id: str, project_update: ProjectCreate, db: Session =
     project.description = project_update.description
     db.commit()
     db.refresh(project)
-    return ProjectSchema.from_orm(project)
+    return ProjectSchema.model_validate(project)
 
 @router.delete("/{project_id}")
 def delete_project(project_id: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -184,7 +246,7 @@ def get_project_datasets(project_id: str, db: Session = Depends(get_db), current
         raise HTTPException(status_code=404, detail="Project not found")
 
     datasets = db.query(Dataset).join(ProjectDataset).filter(ProjectDataset.project_id == project_id).all()
-    return [DatasetSchema.from_orm(d) for d in datasets]
+    return [DatasetSchema.model_validate(d) for d in datasets]
 
 @router.post("/{project_id}/eda/generate")
 def generate_eda_report(

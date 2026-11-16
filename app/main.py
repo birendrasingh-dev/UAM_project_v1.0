@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 import logging
 
 from app.config import settings
@@ -28,6 +30,44 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_exception_handler(SQLAlchemyError, db_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
+
+
+# TrustedHost middleware: restrict allowed hosts to prevent HTTP Host header attacks
+allowed_hosts = [h.strip() for h in settings.ALLOWED_HOSTS.split(",")] if settings.ALLOWED_HOSTS else ["*"]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
+
+# Configure CORS
+origins = []
+if settings.ALLOWED_ORIGINS:
+    origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()]
+
+# Always include local development origins
+local_origins = ["http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:5173", "http://127.0.0.1:5173"]
+for origin in local_origins:
+    if origin not in origins:
+        origins.append(origin)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+)
+
+
+# Security headers middleware: HSTS, CSP, X-Frame-Options, etc.
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    # Only set HSTS on HTTPS requests
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 # Configure logging

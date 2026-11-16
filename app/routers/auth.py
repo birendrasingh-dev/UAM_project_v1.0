@@ -13,7 +13,7 @@ from app.utils.limiter import limiter
 router = APIRouter()
 
 @router.post("/register", response_model=Token)
-@limiter.limit("10/minute")
+@limiter.limit(settings.RATE_LIMIT_REGISTER)
 def register(request: Request, user_create: UserCreate, db: Session = Depends(get_db)):
     user = db.query(UserModel).filter(UserModel.email == user_create.email).first()
     if user:
@@ -39,7 +39,7 @@ def options_register():
     return {}
 
 @router.post("/login", response_model=Token)
-@limiter.limit("15/minute")
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
 def login(request: Request, user_login: UserLogin, db: Session = Depends(get_db)):
     user = db.query(UserModel).filter(UserModel.email == user_login.email).first()
     if not user:
@@ -81,9 +81,9 @@ def read_users_me(current_user: UserModel = Depends(get_current_user)):
     return UserSchema(id=str(current_user.id), name=str(current_user.name), email=str(current_user.email), role=str(current_user.role), status=str(current_user.status))
 
 @router.delete("/users/{user_id}", status_code=204)
-def delete_user(user_id: int, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
+def delete_user(user_id: str, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # Only allow admin or the user themselves to delete
-    if not (current_user.id == user_id or current_user.role == "Admin"):
+    if not (current_user.id == user_id or (current_user.role or "").lower() == "admin"):
         raise HTTPException(status_code=403, detail="Not authorized to delete this user")
     user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not user:

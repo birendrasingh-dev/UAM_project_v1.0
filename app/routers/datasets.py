@@ -61,7 +61,7 @@ def upload_dataset(
 
     try:
         dataset = DatasetService.upload_dataset(file, project_id, current_user.id, db)
-        return DatasetSchema.from_orm(dataset)
+        return DatasetSchema.model_validate(dataset)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -85,7 +85,7 @@ def get_dataset(
 ):
     try:
         dataset = DatasetService.get_dataset(dataset_id, current_user.id, db)
-        return DatasetSchema.from_orm(dataset)
+        return DatasetSchema.model_validate(dataset)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -147,7 +147,7 @@ def list_datasets(
         if limit < 1:
             limit = 20
         datasets = DatasetService.list_datasets(project_id, current_user.id, db, page, limit)
-        return [DatasetSchema.from_orm(d) for d in datasets]
+        return [DatasetSchema.model_validate(d) for d in datasets]
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

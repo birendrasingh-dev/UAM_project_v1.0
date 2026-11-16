@@ -7,5 +7,5 @@ export function useUser() {
 
 export function useIsAdmin() {
   const { role } = useAuth();
-  return role === "admin";
+  return (role || "").toLowerCase() === "admin";
 }

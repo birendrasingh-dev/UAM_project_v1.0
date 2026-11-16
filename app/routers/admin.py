@@ -11,7 +11,7 @@ from sqlalchemy import func
 router = APIRouter()
 
 def admin_required(current_user: UserSchema = Depends(get_current_user)):
-    if current_user.role != "Admin":
+    if (current_user.role or "").lower() != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required")
     return current_user
 

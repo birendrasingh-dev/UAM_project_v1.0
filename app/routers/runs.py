@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
-from app.db.models import Run, Project, Dataset, Log, Artifact
+from app.db.models import Run, Project, Dataset, ProjectDataset, Log, Artifact
 from app.schemas.runs import RunStart, RunStatus, Artifact as ArtifactSchema, Run as RunSchema
 from app.dependencies.auth import get_current_user
 from app.workers.celery_app import celery_app
@@ -52,8 +52,16 @@ def start_run(run_start: RunStart, db: Session = Depends(get_db), current_user =
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Check dataset exists and belongs to project
-    dataset = db.query(Dataset).filter(Dataset.id == run_start.dataset_id, Dataset.project_id == run_start.project_id).first()
+    # Check dataset exists and is linked to the project (via ProjectDataset association table)
+    dataset = (
+        db.query(Dataset)
+        .join(ProjectDataset, Dataset.id == ProjectDataset.dataset_id)
+        .filter(
+            Dataset.id == run_start.dataset_id,
+            ProjectDataset.project_id == run_start.project_id,
+        )
+        .first()
+    )
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
 

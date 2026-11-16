@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    command: ./entrypoint.sh uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: ./entrypoint.sh uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
@@ -10,10 +10,14 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET}
       - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     ports:
       - "8000:8000"
-    volumes:
-      - .:/app
+    depends_on:
+      - redis
+      - postgres
 
   worker:
     build: .
@@ -26,5 +30,25 @@ services:
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET}
       - SECRET_KEY=${SECRET_KEY}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    depends_on:
+      - redis
+      - postgres
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-uam_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-uam_db}
+    ports:
+      - "5432:5432"
     volumes:
-      - .:/app
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

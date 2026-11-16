@@ -11,14 +11,14 @@ router = APIRouter()
 @router.get("/", response_model=List[TemplateSchema])
 def list_templates(db: Session = Depends(get_db)):
     templates = db.query(Template).filter(Template.is_public == 1).all()
-    return [TemplateSchema.from_orm(t) for t in templates]
+    return [TemplateSchema.model_validate(t) for t in templates]
 
 @router.get("/{template_id}", response_model=TemplateSchema)
 def get_template(template_id: str, db: Session = Depends(get_db)):
     template = db.query(Template).filter(Template.id == template_id, Template.is_public == 1).first()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    return TemplateSchema.from_orm(template)
+    return TemplateSchema.model_validate(template)
 
 @router.post("/{template_id}/apply")
 def apply_template(
@@ -43,7 +43,7 @@ def apply_template(
 
 @router.post("/admin", response_model=TemplateSchema)
 def create_template(template_create: TemplateCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    if current_user.role != "admin":
+    if (current_user.role or "").lower() != "admin":
         raise HTTPException(status_code=403, detail="Admin required")
     template = Template(
         name=template_create.name,
@@ -56,4 +56,4 @@ def create_template(template_create: TemplateCreate, db: Session = Depends(get_d
     db.add(template)
     db.commit()
     db.refresh(template)
-    return TemplateSchema.from_orm(template)
+    return TemplateSchema.model_validate(template)
