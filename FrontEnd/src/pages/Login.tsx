@@ -5,11 +5,14 @@ import { Label } from "@/components/ui/label";
 import { BarChart3, Lock, Mail, Sparkles, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { Loader2 } from "lucide-react";
+import { apiClient } from "@/lib/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
@@ -17,7 +20,14 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
+
     try {
+      // Ping backend health endpoint to wake up Render free tier instance
+      await apiClient.request("/api/health", { suppressToast: true }).catch(() => {
+        // Backend may be waking up; proceed with login attempt anyway
+      });
+
       const user = await login(email, password);
       const redirectTo = searchParams.get("redirect");
       const destination = redirectTo && redirectTo.startsWith("/")
@@ -30,6 +40,8 @@ export default function Login() {
     } catch (err: unknown) {
       const error = err as Error;
       setError(error.message || "Login failed");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -101,8 +113,14 @@ export default function Login() {
               </p>
             )}
 
-            <Button type="submit" size="lg" className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold shadow-glow border border-violet-500/30">
-              Sign In
+            <Button type="submit" size="lg" disabled={isLoading} className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold shadow-glow border border-violet-500/30">
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </form>
 

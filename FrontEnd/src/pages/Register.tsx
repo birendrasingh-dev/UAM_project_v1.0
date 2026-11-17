@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { BarChart3, User, Mail, Lock, Sparkles, CheckCircle2, ShieldCheck, Database, Zap } from "lucide-react";
 import { useState } from "react";
 import { apiClient } from "@/lib/api";
+import { Loader2 } from "lucide-react";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -12,23 +13,33 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      setIsLoading(false);
       return;
     }
 
     try {
+      // Ping backend health endpoint to wake up Render free tier instance
+      await apiClient.request("/api/health", { suppressToast: true }).catch(() => {
+        // Backend may be waking up; proceed with registration anyway
+      });
+
       const response = await apiClient.register(name, email, password);
       localStorage.setItem("access_token", response.access_token);
       navigate("/app/dashboard");
     } catch (err: any) {
       setError(err.message || "Registration failed");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -150,8 +161,14 @@ export default function Register() {
               </p>
             )}
 
-            <Button type="submit" size="lg" className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold shadow-glow border border-violet-500/30 pt-1">
-              Create Account
+            <Button type="submit" size="lg" disabled={isLoading} className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold shadow-glow border border-violet-500/30 pt-1">
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Creating account...
+                </>
+              ) : (
+                "Create Account"
+              )}
             </Button>
           </form>
 
