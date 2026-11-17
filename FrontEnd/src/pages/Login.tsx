@@ -34,26 +34,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-slate-950 text-slate-100 font-body overflow-hidden">
-      
+    <div className="min-h-screen grid lg:grid-cols-2 bg-background text-foreground font-body overflow-hidden">
+
       {/* Left Column: Interactive Form */}
-      <div className="flex flex-col justify-center px-6 sm:px-16 lg:px-24 py-12 bg-slate-950 border-r border-slate-900/40 relative z-10">
-        <div className="absolute top-0 left-0 h-96 w-96 bg-radial-gradient from-violet-500/5 to-transparent pointer-events-none rounded-full blur-3xl" />
-        
+      <div className="flex flex-col justify-center px-6 sm:px-16 lg:px-24 py-12 bg-card border-r border-border/50 relative z-10">
+        <div className="absolute top-0 left-0 h-96 w-96 bg-radial-gradient from-primary/10 to-transparent pointer-events-none rounded-full blur-3xl" />
+
         <div className="mx-auto w-full max-w-md space-y-8">
           <div className="space-y-3">
             <Link to="/" className="inline-flex items-center gap-2 group">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-glow group-hover:scale-105 transition-transform duration-300">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground shadow-glow group-hover:scale-105 transition-transform duration-300">
                 <BarChart3 className="h-5 w-5" />
               </div>
-              <span className="font-display font-extrabold text-xl tracking-tight bg-gradient-to-r from-slate-100 to-slate-300 bg-clip-text text-transparent">
+              <span className="font-display font-extrabold text-xl tracking-tight bg-gradient-to-r from-foreground to-foreground bg-clip-text text-transparent">
                 UAM
               </span>
             </Link>
-            <h1 className="text-3xl font-extrabold tracking-tight font-display bg-gradient-to-r from-slate-100 to-slate-300 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-extrabold tracking-tight font-display bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
               Welcome Back
             </h1>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-muted-foreground">
               Sign in to manage and train automated analytics pipelines.
             </p>
           </div>
@@ -70,7 +70,7 @@ export default function Login() {
                   placeholder="alex@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 bg-slate-900 border-slate-800 text-slate-200 placeholder-slate-500 focus:border-violet-500"
+                  className="pl-10 bg-input border-border text-foreground placeholder-muted-foreground focus:border-primary"
                 />
               </div>
             </div>
@@ -83,20 +83,20 @@ export default function Login() {
                 </Link>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="password"
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 bg-slate-900 border-slate-800 text-slate-200 focus:border-violet-500"
+                  className="pl-10 bg-input border-border text-foreground placeholder-muted-foreground focus:border-primary"
                 />
               </div>
             </div>
 
             {error && (
-              <p className="text-xs text-rose-500 font-mono bg-rose-500/5 border border-rose-500/10 p-2.5 rounded-lg">
+              <p className="text-xs text-rose-500 font-mono bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg">
                 ⚠ {error}
               </p>
             )}
@@ -118,10 +118,10 @@ export default function Login() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" className="h-10 border-slate-900 bg-slate-950 hover:bg-slate-900 text-slate-300 text-xs">
+            <Button variant="outline" className="h-10 border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground text-xs">
               Google
             </Button>
-            <Button variant="outline" className="h-10 border-slate-900 bg-slate-950 hover:bg-slate-900 text-slate-300 text-xs">
+            <Button variant="outline" className="h-10 border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground text-xs">
               GitHub
             </Button>
           </div>
@@ -136,9 +136,9 @@ export default function Login() {
       </div>
 
       {/* Right Column: Premium AI Graphic / Rings */}
-      <div className="hidden lg:flex flex-col justify-between p-16 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
-        <div className="absolute top-0 right-0 h-[600px] w-[600px] bg-radial-gradient from-violet-500/10 to-transparent pointer-events-none rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 h-96 w-96 bg-radial-gradient from-cyan-500/5 to-transparent pointer-events-none rounded-full blur-3xl" />
+      <div className="hidden lg:flex flex-col justify-between p-16 bg-gradient-to-br from-background via-card to-background relative overflow-hidden">
+        <div className="absolute top-0 right-0 h-[600px] w-[600px] bg-radial-gradient from-primary/10 to-transparent pointer-events-none rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-96 w-96 bg-radial-gradient from-accent/10 to-transparent pointer-events-none rounded-full blur-3xl" />
         
         {/* Top badge */}
         <div className="flex items-center gap-1.5 self-start px-3 py-1 rounded-full text-xs font-semibold bg-violet-500/10 text-violet-300 border border-violet-500/20">
